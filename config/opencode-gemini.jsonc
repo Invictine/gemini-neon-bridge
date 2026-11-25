@@ -27,6 +27,9 @@
       "models": {
         "neon": {
           "name": "Gemini 4 Neon"
+        },
+        "hydrogen": {
+          "name": "Gemini 4 Hydrogen"
         }
       }
     }

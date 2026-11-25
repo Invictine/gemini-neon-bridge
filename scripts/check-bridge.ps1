@@ -73,12 +73,12 @@ if ($ids.Count -gt 0) {
     foreach ($id in $ids) { Write-Host "  - $id" }
 }
 
-$required = @('gemini-4-neon')
+$required = @('gemini-4-neon', 'gemini-4-hydrogen')
 $missing = @($required | Where-Object { $ids -notcontains $_ })
 if ($missing.Count -gt 0) {
     Write-Warning ("Required model(s) missing: {0}. Re-apply the config.py patch and restart the bridge." -f ($missing -join ', '))
     exit 1
 }
-Write-Host 'OK: gemini-4-neon is advertised.'
+Write-Host 'OK: gemini-4-neon and gemini-4-hydrogen are advertised.'
 Write-Host ('-' * 52)
 exit 0

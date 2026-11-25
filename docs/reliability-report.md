@@ -1,5 +1,8 @@
 # Reliability validation
 
+> [!NOTE]
+> **2026-11-25:** The custom Windows fork (**T3 Code (Gemini)** / `feat/gemini-native-provider`) referenced in the November 20 historical records below is now **deprecated** in favor of regular upstream T3 Code configured with a separate `gemini-bridge` OpenCode provider instance ([setup guide](t3-code-setup.md)).
+
 This report separates code-level reliability from live Google model behavior.
 
 ## Current result

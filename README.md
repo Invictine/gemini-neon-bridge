@@ -2,9 +2,9 @@
 
 # Neon Bridge
 
-**Neon Bridge** connects OpenCode to a local OpenAI-compatible bridge driven by a Chrome extension that sends requests through an inactive tab in your signed-in Gemini web app. It pairs with a Windows T3 Code fork that adds a native Gemini provider alongside your standard T3 Code installation, defaulting to **Gemini 4 Neon** where your account supports it.
+**Neon Bridge** connects OpenCode to a local OpenAI-compatible bridge driven by a Chrome extension that sends requests through an inactive tab in your signed-in Gemini web app. Add **Gemini** as a separate OpenCode provider instance in regular T3 Code, defaulting to **Gemini 4 Neon** where your account supports it.
 
-[Windows T3 Code fork](https://github.com/Invictine/t3code/tree/feat/gemini-native-provider) · [Setup](#setup) · [Reliability checks](docs/reliability-report.md)
+[Regular T3 Code setup](docs/t3-code-setup.md) · [Setup](#setup) · [Reliability checks](docs/reliability-report.md) · [Deprecated fork notice](#deprecated-windows-t3-code-fork)
 
 ## Live OpenCode terminal demo
 
@@ -14,21 +14,21 @@
 
 ## Compatibility and access
 
-This project is unofficial. Gemini account quotas, model availability, and web UI updates can interrupt requests. The docs and T3 Code fork are public. Setup requires access to the private, pinned bridge dependency while its upstream licensing is unresolved.
+This project is unofficial. Gemini account quotas, model availability, and web UI updates can interrupt requests. These docs are public; setup requires access to the private, pinned bridge dependency while its upstream licensing is unresolved.
 
 ## Architecture
 
 ```
-T3 Code fork (branch feat/gemini-native-provider, native "Gemini" provider)
-  -> GeminiDriver -> native OpenCode executable
-      -> OpenCode "gemini-app" provider  (config forced via env vars)
+Regular T3 Code (OpenCode provider instance "gemini-bridge", display name "Gemini")
+  -> OpenCode runtime (isolated XDG dirs + OPENCODE_CONFIG)
+      -> OpenCode "gemini-app" provider  (config/t3-neon-opencode.json)
           -> local bridge  http://127.0.0.1:8100/v1  (vendor/gemini-web-api)
               -> signed-in Gemini tab (Chrome backend) or saved session (cookie backend)
 ```
 
-Load the unpacked `vendor/gemini-web-api/extension` in the signed-in Chrome profile, set `GEMINI_BACKEND=chrome` in the project `.env`, and start the bridge in the background. The extension uses an inactive Gemini tab and selects the exact model. The [installed-extension check](#testing-the-installed-chrome-extension) can open that tab for you and verify Neon through the local API.
+Load the unpacked `vendor/gemini-web-api/extension` in the signed-in Chrome profile, set `GEMINI_BACKEND=chrome` in the project `.env`, and start the bridge in the background. The extension uses inactive Gemini tabs and selects the exact model. The [installed-extension check](#testing-the-installed-chrome-extension) can open a worker tab for you and verify Neon through the local API.
 
-The T3 Code fork's `feat/gemini-native-provider` branch adds **Gemini** under Settings → Providers. Its Sign in dialog verifies saved cookies for the cookie backend. That setup is documented below. The [validation report](docs/reliability-report.md) tracks live Chrome and T3 results separately.
+Add **Gemini** as a separate OpenCode provider instance in regular T3 Code following [the T3 Code setup guide](docs/t3-code-setup.md). For the separate [cookie backend](docs/cookie-capture.md), configure `.env` directly or verify cookies through `POST /v1/auth/session`. The [validation report](docs/reliability-report.md) tracks live Chrome and T3 results separately.
 
 ## ⚠️ Read this first
 
@@ -40,107 +40,82 @@ The T3 Code fork's `feat/gemini-native-provider` branch adds **Gemini** under Se
 ## Prerequisites
 
 - **Python 3.12 and uv** for the local bridge.
-- **Windows** and the [T3 Code fork](https://github.com/Invictine/t3code/tree/feat/gemini-native-provider) on `feat/gemini-native-provider`. Follow the fork's toolchain instructions for Node.js and `vp`.
-- **Native OpenCode 1.x executable** — the provider launches it with a local Gemini config. Set **OpenCode executable** in the provider settings to override discovery. OpenCode 1.14.19 was tested with this fork.
-- **Chrome**, logged into <https://gemini.google.com> with an account whose model picker offers **4 Neon**.
+- **Windows** and regular **T3 Code** with support for multiple OpenCode provider instances ([setup guide](docs/t3-code-setup.md)).
+- **OpenCode 1.14.19** for the bridge provider instance. The Windows setup installs it cleanly at `%LOCALAPPDATA%\gemini-bridge\runtime\opencode` beside your existing OpenCode runtime.
+- **Chrome**, logged into <https://gemini.google.com> with an account whose picker offers **4 Neon**, **4 Argon**, or **4 Hydrogen**.
 
 ## Setup
 
-### 1. Install T3 Code (Gemini) on Windows
+Start with [the Chrome bridge setup](#1-set-up-the-signed-in-chrome-bridge), then [add the separate Gemini provider instance in regular T3 Code](docs/t3-code-setup.md).
 
-The Gemini edition installs alongside regular T3 Code with its own app identity and settings. To build the Windows installer, use the toolchain from the fork's README and run the following.
+### 1. Set up the signed-in Chrome bridge
 
-```powershell
-git clone --branch feat/gemini-native-provider https://github.com/Invictine/t3code.git
-cd t3code
-vp i
-vp run dist:desktop:win:gemini
-```
-
-Run the resulting installer and open **T3 Code (Gemini)** from the Start menu. The native provider expects a compatible OpenCode 1.x executable. Install the tested version into the per-user runtime location, or set a compatible executable in the Gemini provider settings:
-
-```powershell
-npm install --prefix "$env:LOCALAPPDATA\T3 Code (Gemini)\runtime\opencode" --no-audit --no-fund opencode-ai@1.14.19
-```
-
-#### Run from source instead
-
-From your T3 Code fork checkout, switch to the Gemini branch and start the desktop development build.
-
-```powershell
-git checkout feat/gemini-native-provider
-vp i                       # install workspace dependencies (see the fork's README for `vp`)
-npm run dev:desktop        # or: npm run build:desktop && npm run start:desktop
-```
-
-Keep that T3 build running — it is the app you will configure below. The fork's README has the full toolchain setup (Node.js version, `vp`, etc.).
-
-### 2. Set up the signed-in Chrome bridge
-
-With access to the pinned dependency, clone this project and install the bridge.
+With access to the pinned dependency, clone this project.
 
 ```powershell
 git clone --recurse-submodules https://github.com/Invictine/gemini-neon-bridge.git
 cd gemini-neon-bridge
-uv sync --locked --project vendor/gemini-web-api
-Copy-Item .env.example .env
 ```
 
-Set `GEMINI_BACKEND=chrome` in `.env`. In the Chrome profile where you are signed in to Gemini, open `chrome://extensions`, turn on **Developer mode**, and use **Load unpacked** to select `vendor/gemini-web-api/extension`. Keep Chrome running.
-
-Start the bridge and check that it responds.
+Install Python 3.12 and [uv](https://docs.astral.sh/uv/getting-started/installation/), then run the guided setup:
 
 ```powershell
-.\scripts\start-bridge.ps1 -Background # hidden process, logs in bridge-detached*.log
-.\scripts\check-bridge.ps1      # second terminal: health + model list
+.\scripts\setup-windows.ps1
 ```
 
-`check-bridge.ps1` should print **Bridge reachable: YES** and list `gemini-4-neon`. Background launch returns after the health endpoint is ready and leaves no visible terminal. Omit `-Background` to run it in the terminal for debugging. Model advertisement alone does not verify generation.
+The script installs the pinned bridge dependencies and the isolated OpenCode 1.14.19 runtime (`%LOCALAPPDATA%\gemini-bridge\runtime\opencode`), configures `.env` for Chrome, and starts the bridge in the background. It guides you through signing into Gemini and loading the unpacked extension from `vendor/gemini-web-api/extension`. Keep Chrome open. The script lists connected accounts, lets you choose one, and verifies a fresh-marker reply through an exact model offered by that account.
 
-To launch the bridge automatically at Windows sign-in, run `.\scripts\install-bridge-startup.ps1`. It registers a hidden task for your Windows account. Chrome still needs the enabled extension and a signed-in Gemini session.
+After setup, `.\scripts\check-bridge.ps1` should print **Bridge reachable: YES** and list `gemini-4-neon` and `gemini-4-hydrogen`. You can also run `.\scripts\start-bridge.ps1` without `-Background` to see bridge logs in the terminal while debugging. Model advertisement alone does not verify generation.
 
-### 3. Add the Gemini provider and sign in
+To launch the bridge automatically at Windows sign-in, run `.\scripts\install-bridge-startup.ps1`. It registers a hidden task (`Gemini Bridge`) for your Windows account and removes any legacy `T3 Code (Gemini) Bridge` task. Chrome still needs the enabled extension and a signed-in Gemini session.
 
-In the fork: **Settings → Providers → Add provider → Gemini**. In Chrome mode, the native provider checks the bridge and the extension worker. Sign in through Chrome. The separate [cookie backend](docs/cookie-capture.md) uses the sign-in dialog below.
+### 2. Add the Gemini provider in regular T3 Code
 
-> [!WARNING]
-> This is **unofficial, reverse-engineered** access to the Gemini web app. It may **violate Google's Terms of Service** and can lead to **account restrictions or termination**. Use a **secondary / throwaway Google account** if at all possible. See "Read this first" above.
+Follow [the regular T3 Code setup guide](docs/t3-code-setup.md) to register **Gemini** (`gemini-bridge`) under **Settings → Providers → Add provider → OpenCode** using `config/t3-neon-opencode.json` and isolated `XDG_*` directories.
 
-The dialog POSTs to `POST http://127.0.0.1:<port>/v1/auth/session` with `Authorization: Bearer gemini-local`. The bridge **checks the cookies live against Google** (a lightweight `client.init()` that fetches the access token — no generation is sent) before saving or applying anything:
-
-- **Verified (2xx):** the cookies are merged into this project's `.env` and applied to the running shared client immediately — no bridge restart. The provider is marked signed in and ready.
-- **Rejected (401/502):** nothing is saved locally and the current working sign-in is untouched; the dialog shows the bridge's error.
-- **Bridge unreachable:** the cookies are saved into T3's provider settings but are explicitly marked **unverified**; start the bridge and use **Apply saved cookies** (shown next to *Update cookies*) to confirm them without re-pasting. Until then the provider shows as unauthenticated. A rejection on retry keeps the saved cookies and reports the error — it never silently overwrites a working sign-in.
-
-On a successful cookie verification, the bridge reports whether the account's registry contains **Neon**. T3 shows this as an advisory note in the sign-in result. A successful cookie verification alone does not establish Neon access.
+For the separate [cookie backend](docs/cookie-capture.md), put `__Secure-1PSID` and `__Secure-1PSIDTS` into `.env` (or POST them to `http://127.0.0.1:<port>/v1/auth/session` with `Authorization: Bearer gemini-local`). The auth endpoint checks cookies live against Google before saving to `.env` and applying them to the running shared client.
 
 Cookie values are never returned in a response, echoed in an error, or written to logs. Credentials are also rejected if they are empty, over 4096 characters, or contain line breaks, NUL, or `=`.
 
-> `.env` holds **session cookies = full account credentials**. Never commit, share, or paste it into a chat. It is gitignored. The auth endpoint uses the same `GEMINI_API_KEY` as `/v1/models`; CORS is restricted to loopback HTTP origins on the bridge port plus T3's `t3code://app`, `t3code-dev://app`, and `t3code-gemini://app` webview origins. The `/ws` extension socket also requires that key or a trusted local/T3/extension origin. Override the credentials file location with `GEMINI_ENV_FILE` if you relocate it.
+> `.env` holds **session cookies = full account credentials**. Never commit, share, or paste it into a chat. It is gitignored. The auth endpoint uses the same `GEMINI_API_KEY` as `/v1/models`; CORS is restricted to loopback HTTP origins on the bridge port plus T3's `t3code://app`, `t3code-dev://app`, and legacy `t3code-gemini://app` webview origins. The `/ws` extension socket also requires that key or a trusted local/T3/extension origin. Override the credentials file location with `GEMINI_ENV_FILE` if you relocate it.
 
-### 4. Pick the model
+### 3. Pick the model and manage accounts or queue
 
-Select provider **Gemini**. Its model is **Gemini 4 Neon** (`gemini-app/neon`).
+In regular T3 Code's composer, select **Gemini → Gemini 4 Neon** (or **Gemini 4 Hydrogen**, **Gemini 4 Argon**, or **Gemini Auto**). The signed-in Google account's Gemini picker determines which modes work.
+
+The local bridge exposes control endpoints with `Authorization: Bearer gemini-local`:
+
+- `GET /v1/accounts` and `PUT /v1/accounts/default` (`{"authuser": "0"}`) inspect connected Chrome accounts and select which Google account new requests use.
+- `GET /v1/requests` inspects active and queued requests; `POST /v1/extension/open-worker` asks the extension to open an inactive worker tab.
+- `GET /v1/usage` (or `?refresh=1`) reports cached or refreshed quota windows read while Gemini's **Settings → Usage limits** panel or model picker is visible.
+- `POST /v1/model-check/{model}` runs an isolated OpenCode file-read check against `neon`, `argon`, `hydrogen`, or `auto`.
 
 ### Use Gemini's website tools
 
 With the Chrome backend, ask Gemini to search the public web for current information. Gemini can use its own Google Search, and the bridge carries clickable links into the T3 reply. **Sources from Gemini** lists links exposed by the site's citation UI. **Answer links from sites cited by Gemini** lists answer links whose host matches a citation chip. **Links in Gemini’s answer** lists the remaining links from the answer body.
 
-To make dedicated search, image, and video tools available to the installed Gemini edition, run:
+To make dedicated search, image, and video tools available to regular T3 Code's **Gemini** provider (`%USERPROFILE%\.t3\gemini-bridge\config`), run:
 
 ```powershell
 .\scripts\install-opencode-tools.ps1
 ```
 
-Restart **T3 Code (Gemini)** if it was running. Its isolated OpenCode runtime discovers `gemini_app_search`, `gemini_app_generate_image`, `gemini_app_start_video`, and `gemini_app_video_status`. Ask for a web search with sources, an image, or a video. The video tool returns a job ID that can be checked for a download link. Google account access and quotas apply to media generation.
+Start a new **Gemini** thread in T3 Code so OpenCode reloads tools from `%USERPROFILE%\.t3\gemini-bridge\config\opencode\tools`. It discovers `gemini_app_search`, `gemini_app_generate_image`, `gemini_app_start_video`, and `gemini_app_video_status`. Ask for a web search with sources, an image, or a video. The video tool returns a job ID that can be checked for a download link. Google account access and quotas apply to media generation.
 
 API clients can pass `"web_search_options": {}` in a text chat completion to request website Search. If Gemini omits usable citation links, the bridge includes that status with the answer. Set `"web_search_options": {"require_citations": true}` to require links backed by native citation evidence. Website Search requires a Chrome worker. Image and video are also available through their dedicated API endpoints.
 
+## Deprecated: Windows T3 Code fork
+
+> [!NOTE]
+> The custom Windows fork ([`Invictine/t3code` branch `feat/gemini-native-provider`](https://github.com/Invictine/t3code/tree/feat/gemini-native-provider), **T3 Code (Gemini)**) is **deprecated** and unmaintained for this project.
+
+Upstream regular T3 Code now supports adding **Gemini** (`gemini-bridge`) as an isolated OpenCode provider instance directly, so building or running a forked desktop binary is no longer needed. Existing bridge CORS support for `t3code-gemini://app` remains intact only for backward compatibility.
+
 ## Verification checklist
 
-- [ ] `.\scripts\check-bridge.ps1` shows the bridge reachable and `gemini-4-neon` listed.
-- [ ] T3 shows Gemini ready with the signed-in Chrome worker connected.
-- [ ] A test prompt in T3 returns a Gemini answer (watch the bridge terminal for the request).
+- [ ] `.\scripts\setup-windows.ps1` completes its real first-reply check, and `.\scripts\check-bridge.ps1` lists `gemini-4-neon` and `gemini-4-hydrogen`.
+- [ ] Regular T3 Code shows the **Gemini** (`gemini-bridge`) provider ready with the signed-in Chrome worker connected.
+- [ ] A test prompt in T3 returns a Gemini answer (watch the bridge terminal or `GET /v1/requests` for the request).
 - [ ] Tool use works — OpenCode emulates tool calling over the bridge; try a harmless command like listing a directory.
 
 ## Troubleshooting
@@ -151,11 +126,11 @@ API clients can pass `"web_search_options": {}` in a text chat completion to req
 | Models fall back to `gemini-3-flash` | Account not entitled, or alias resolution failed — check the bridge log and re-apply the `config.py` patch. |
 | Tool-call parse failures | Emulated calling is best-effort, but failures are no longer silent: the bridge returns a structured `__gemini_tool_error__` tool call (and rejects tool names not supplied in the request) so the agent loop can react. Retry, or use a simpler prompt. |
 | Model missing from Gemini's picker | Check which exact models Google offers on the signed-in account. The bridge will show the visible options and refuse to substitute a different model. |
-| Port already in use | Change `GEMINI_API_PORT` in `.env` **and** the `baseURL` in both `config\opencode-gemini*.json*`. |
+| Port already in use | Change `GEMINI_API_PORT` in `.env` **and** the `baseURL` in `config\t3-neon-opencode.json` (plus `config\opencode-gemini*.json*`). |
 
 ## Limitations
 
-- **Local bridge only / remote browsers.** The sign-in dialog and the forced OpenCode config both target `http://127.0.0.1:<port>`, which is the loopback of the machine running them. This works for a local desktop T3 build and for a remote T3 server whose browser and bridge are on the same host. It does **not** work for a browser on a different machine from the bridge: the browser's `127.0.0.1` is not the T3 server host. T3 Code has no small, generic "proxy a local bridge" hook — adding one means wiring a new authenticated route through its Effect HTTP server and web RPC client, which is a large framework change. That was deliberately **not attempted**. Workarounds: run the bridge on the same host as the browser, or tunnel the bridge port (e.g. SSH `-L 8100:127.0.0.1:8100`) so loopback resolves to it.
+- **Local bridge only / remote browsers.** The OpenCode configs target `http://127.0.0.1:<port>`, which is the loopback of the machine running them. This works for a local desktop T3 build and for a remote T3 server whose browser and bridge are on the same host. It does **not** work for a browser on a different machine from the bridge: the browser's `127.0.0.1` is not the T3 server host. Workarounds: run the bridge on the same host as the browser, or tunnel the bridge port (e.g. SSH `-L 8100:127.0.0.1:8100`) so loopback resolves to it.
 
 ## Maintenance
 

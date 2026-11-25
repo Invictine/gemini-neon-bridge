@@ -29,7 +29,7 @@ if (Test-Path -LiteralPath $EnvFile) {
     }
 }
 
-# The running T3 sign-in endpoint persists verified cookies through this path.
+# Keep session cookies scoped to this checkout's .env when /v1/auth/session persists them.
 # Force the project-local file even if inherited or .env values point elsewhere.
 $env:GEMINI_ENV_FILE = $EnvFile
 

@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$ConfigRoot = (Join-Path $env:USERPROFILE '.t3-gemini\opencode-config')
+    [string]$ConfigRoot = (Join-Path $env:USERPROFILE '.t3\gemini-bridge\config')
 )
 
 $ErrorActionPreference = 'Stop'

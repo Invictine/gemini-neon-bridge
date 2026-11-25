@@ -1,4 +1,5 @@
 // gemini-jio-argon-opencode-tools
+import { readFileSync } from "node:fs";
 import { tool } from "@opencode-ai/plugin";
 
 type BridgeConfig = {
@@ -16,17 +17,41 @@ function isRecord(value: unknown): value is JsonRecord {
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 const JOB_ID = /^(?:cvid_[a-f0-9]{16}|vid_[a-f0-9]{20})$/i;
 
+function parseConfigJson(rawText: string, sourceLabel: string): JsonRecord {
+  const parsed: unknown = JSON.parse(rawText);
+  if (!isRecord(parsed)) {
+    throw new Error(`${sourceLabel} is not a JSON object.`);
+  }
+  return parsed;
+}
+
+function expandEnvPlaceholders(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  return value.replace(/\{env:([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, name: string) => process.env[name] ?? "");
+}
+
 function readBridgeConfig(): BridgeConfig {
-  let raw: JsonRecord;
-  try {
-    const parsed: unknown = JSON.parse(process.env.OPENCODE_CONFIG_CONTENT || "{}");
-    if (!isRecord(parsed)) throw new Error();
-    raw = parsed;
-  } catch {
-    throw new Error("OpenCode's in-memory configuration is not valid JSON.");
+  let fileRaw: JsonRecord = {};
+  const configPath = process.env.OPENCODE_CONFIG?.trim();
+  if (configPath) {
+    try {
+      fileRaw = parseConfigJson(readFileSync(configPath, "utf8"), "OPENCODE_CONFIG");
+    } catch {
+      throw new Error("OpenCode's OPENCODE_CONFIG file is unreadable or not valid JSON.");
+    }
   }
 
-  const model = typeof raw.model === "string" ? raw.model.trim() : "";
+  let inlineRaw: JsonRecord = {};
+  if (process.env.OPENCODE_CONFIG_CONTENT?.trim()) {
+    try {
+      inlineRaw = parseConfigJson(process.env.OPENCODE_CONFIG_CONTENT, "OPENCODE_CONFIG_CONTENT");
+    } catch {
+      throw new Error("OpenCode's in-memory configuration is not valid JSON.");
+    }
+  }
+
+  const rawModel = inlineRaw.model ?? fileRaw.model;
+  const model = typeof rawModel === "string" ? rawModel.trim() : "";
   const separator = model.indexOf("/");
   const providerId = separator >= 0 ? model.slice(0, separator) : "";
   const modelId = separator >= 0 ? model.slice(separator + 1).trim() : "";
@@ -34,16 +59,27 @@ function readBridgeConfig(): BridgeConfig {
     throw new Error("Configure a selected Gemini App model using gemini-app/model syntax in OpenCode.");
   }
 
-  const providerRoot = isRecord(raw.provider) ? raw.provider : {};
-  const providersRoot = isRecord(raw.providers) ? raw.providers : {};
-  const providerValue = providerRoot[providerId] ?? providersRoot[providerId];
-  const provider = isRecord(providerValue) ? providerValue : {};
-  const optionsValue = provider.options ?? provider.settings;
-  const options = isRecord(optionsValue) ? optionsValue : {};
-  const baseURL = options.baseURL;
-  const apiKey = options.apiKey;
+  const fileProviderRoot = isRecord(fileRaw.provider) ? fileRaw.provider : {};
+  const fileProvidersRoot = isRecord(fileRaw.providers) ? fileRaw.providers : {};
+  const inlineProviderRoot = isRecord(inlineRaw.provider) ? inlineRaw.provider : {};
+  const inlineProvidersRoot = isRecord(inlineRaw.providers) ? inlineRaw.providers : {};
+  const fileProvider = isRecord(fileProviderRoot[providerId] ?? fileProvidersRoot[providerId])
+    ? (fileProviderRoot[providerId] ?? fileProvidersRoot[providerId]) as JsonRecord
+    : {};
+  const inlineProvider = isRecord(inlineProviderRoot[providerId] ?? inlineProvidersRoot[providerId])
+    ? (inlineProviderRoot[providerId] ?? inlineProvidersRoot[providerId]) as JsonRecord
+    : {};
+  const fileOptions = isRecord(fileProvider.options ?? fileProvider.settings)
+    ? (fileProvider.options ?? fileProvider.settings) as JsonRecord
+    : {};
+  const inlineOptions = isRecord(inlineProvider.options ?? inlineProvider.settings)
+    ? (inlineProvider.options ?? inlineProvider.settings) as JsonRecord
+    : {};
+  const options: JsonRecord = { ...fileOptions, ...inlineOptions };
+  const baseURL = expandEnvPlaceholders(options.baseURL);
+  const apiKey = expandEnvPlaceholders(options.apiKey);
   if (typeof baseURL !== "string" || typeof apiKey !== "string" || !apiKey) {
-    throw new Error("Gemini App bridge settings are missing from OpenCode's in-memory configuration.");
+    throw new Error("Gemini App bridge settings are missing from OpenCode's configuration.");
   }
 
   let parsed: URL;

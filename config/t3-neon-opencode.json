@@ -1,0 +1,21 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "gemini-app/neon",
+  "enabled_providers": ["gemini-app"],
+  "provider": {
+    "gemini-app": {
+      "name": "Gemini",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "http://127.0.0.1:8100/v1",
+        "apiKey": "{env:GEMINI_API_KEY}"
+      },
+      "models": {
+        "auto": { "name": "Gemini Auto", "tool_call": true },
+        "neon": { "name": "Gemini 4 Neon", "tool_call": true },
+        "argon": { "name": "Gemini 4 Argon", "tool_call": true },
+        "hydrogen": { "name": "Gemini 4 Hydrogen", "tool_call": true }
+      }
+    }
+  }
+}
